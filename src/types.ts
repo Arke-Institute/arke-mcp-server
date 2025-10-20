@@ -96,11 +96,13 @@ export interface SearchResponse {
 }
 
 // Entity API response (from api.arke.institute/entities/{pi})
-export interface EntityResponse {
-	pi: string;
-	manifest: EntityManifest;
-	metadata: EntityMetadata | null;
+// Note: The API returns the manifest fields directly at the top level
+export interface EntityResponse extends EntityManifest {
+	// Additional fields for enriched data
+	metadata?: EntityMetadata | null;
 	metadata_cid?: string;
+	// Component data fetched from IPFS
+	component_data?: Record<string, unknown>;
 }
 
 // Batch entity fetch request
