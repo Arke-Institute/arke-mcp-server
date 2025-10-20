@@ -2,7 +2,7 @@ import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ArkeSearchClient } from "./clients/arke.js";
-import { formatSearchResultsForAI } from "./utils/formatters.js";
+import { formatSearchResultsForAI, formatEntitiesForAI } from "./utils/formatters.js";
 import type { NamespaceInfo } from "./types.js";
 
 /**
@@ -50,11 +50,11 @@ export class ArkeMCP extends McpAgent {
 						.number()
 						.int()
 						.min(1)
-						.max(100)
+						.max(20)
 						.optional()
 						.default(10)
 						.describe(
-							"Number of results to return (1-100). Default: 10. Higher values return more results but may include less relevant matches.",
+							"Number of results to return (1-20 for concise mode, 1-5 for verbose mode). Default: 10. Higher values return more results but may include less relevant matches.",
 						),
 					namespaces: z
 						.array(namespaceEnum)
@@ -62,17 +62,34 @@ export class ArkeMCP extends McpAgent {
 						.describe(
 							`Optional: Filter results by entity type(s). Available namespaces: ${namespaceDescriptions}. If omitted, searches all entity types. Use specific namespaces to narrow results (e.g., ["digitalObject"] for scanned documents with extracted text, ["fileUnit"] for archival file units).`,
 						),
+					verbose: z
+						.boolean()
+						.optional()
+						.default(false)
+						.describe(
+							"Verbose mode: Returns complete raw data for all results (max topK=5). Concise mode (default): Returns formatted, abbreviated results (max topK=20).",
+						),
 				},
-				async ({ query, topK, namespaces }) => {
+				async ({ query, topK, namespaces, verbose }) => {
 					try {
+						// Enforce topK limits based on verbose mode
+						const maxTopK = verbose ? 5 : 20;
+						const adjustedTopK = Math.min(topK, maxTopK);
+
+						if (topK > maxTopK) {
+							console.log(
+								`Arke MCP: topK ${topK} exceeds max ${maxTopK} for ${verbose ? "verbose" : "concise"} mode, using ${adjustedTopK}`,
+							);
+						}
+
 						console.log(
-							`Arke MCP: Searching for "${query}" (topK: ${topK}, namespaces: ${namespaces?.join(", ") || "all"})`,
+							`Arke MCP: Searching for "${query}" (topK: ${adjustedTopK}, namespaces: ${namespaces?.join(", ") || "all"}, verbose: ${verbose})`,
 						);
 
 						// Perform the search
 						const response = await this.arkeClient.search({
 							query,
-							topK,
+							topK: adjustedTopK,
 							namespaces,
 						});
 
@@ -81,7 +98,7 @@ export class ArkeMCP extends McpAgent {
 						);
 
 						// Format results for AI consumption
-						const formatted = formatSearchResultsForAI(response);
+						const formatted = formatSearchResultsForAI(response, verbose);
 
 						return {
 							content: [{ type: "text", text: formatted }],
@@ -104,7 +121,56 @@ export class ArkeMCP extends McpAgent {
 				},
 			);
 
-			console.log("Arke MCP: Initialized successfully");
+			// Define the get_arke_entities tool for fetching full entity details
+			this.server.tool(
+				"get_arke_entities",
+				{
+					pis: z
+						.array(z.string())
+						.min(1)
+						.max(10)
+						.describe(
+							"Array of Persistent Identifiers (PIs) to fetch (1-10 PIs). Each PI should be a valid Arke entity identifier (e.g., '01K7ZG1BTFDPMRJWEQB4JBYR42').",
+						),
+				},
+				async ({ pis }) => {
+					try {
+						console.log(
+							`Arke MCP: Fetching ${pis.length} ${pis.length === 1 ? "entity" : "entities"}: ${pis.join(", ")}`,
+						);
+
+						// Fetch all entities in parallel
+						const entities = await this.arkeClient.getEntities(pis);
+
+						console.log(
+							`Arke MCP: Successfully fetched ${entities.length} ${entities.length === 1 ? "entity" : "entities"}`,
+						);
+
+						// Format entities for AI consumption
+						const formatted = formatEntitiesForAI(entities);
+
+						return {
+							content: [{ type: "text", text: formatted }],
+						};
+					} catch (error) {
+						const errorMessage =
+							error instanceof Error ? error.message : String(error);
+						console.error(`Arke MCP: Entity fetch error - ${errorMessage}`);
+
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Error fetching entities: ${errorMessage}\n\nPlease verify:\n- All PIs are valid Arke entity identifiers\n- The entities exist in the Arke system\n- You provided 1-10 PIs`,
+								},
+							],
+							isError: true,
+						};
+					}
+				},
+			);
+
+			console.log("Arke MCP: Initialized successfully with 2 tools: search_arke, get_arke_entities");
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error ? error.message : String(error);
@@ -138,7 +204,7 @@ export default {
 						sse: "/sse - Server-Sent Events endpoint for MCP protocol",
 						mcp: "/mcp - Standard MCP endpoint",
 					},
-					tools: ["search_arke"],
+					tools: ["search_arke", "get_arke_entities"],
 					repository: "https://github.com/arke-institute",
 				}),
 				{

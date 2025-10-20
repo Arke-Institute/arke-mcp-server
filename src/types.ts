@@ -94,3 +94,16 @@ export interface SearchResponse {
 	results: SearchResult[];
 	took_ms?: number;
 }
+
+// Entity API response (from api.arke.institute/entities/{pi})
+export interface EntityResponse {
+	pi: string;
+	manifest: EntityManifest;
+	metadata: EntityMetadata | null;
+	metadata_cid?: string;
+}
+
+// Batch entity fetch request
+export interface GetEntitiesRequest {
+	pis: string[];
+}
