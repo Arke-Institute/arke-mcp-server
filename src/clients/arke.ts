@@ -9,11 +9,12 @@ import type {
 	SearchResponse,
 	EntityResponse,
 } from "../types.js";
+import { config } from "../config.js";
 
 export class ArkeSearchClient {
-	private baseUrl = "https://search.arke.institute";
-	private apiUrl = "https://api.arke.institute";
-	private ipfsUrl = "https://ipfs.arke.institute";
+	private baseUrl = config.arke.searchUrl;
+	private apiUrl = config.arke.apiUrl;
+	private ipfsUrl = config.arke.ipfsUrl;
 
 	/**
 	 * Fetch available namespaces and their descriptions

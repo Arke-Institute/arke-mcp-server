@@ -2,7 +2,7 @@
  * Utilities for formatting Arke search results for AI consumption
  */
 
-import type { SearchResponse, SearchResult, EntityResponse } from "../types.js";
+import type { SearchResponse, SearchResult, EntityResponse, OCRResponse, OCRBatchResponse } from "../types.js";
 
 /**
  * Deep search for extracted text in nested object structures
@@ -319,6 +319,198 @@ export function formatEntitiesForAI(entities: EntityResponse[]): string {
 		output.push("```");
 
 		if (i < entities.length - 1) {
+			output.push("");
+			output.push("---");
+			output.push("");
+		}
+	}
+
+	return output.join("\n");
+}
+
+/**
+ * Format OCR response for AI consumption (single PI)
+ */
+export function formatOCRResultForAI(response: OCRResponse): string {
+	const output: string[] = [];
+
+	output.push(`# OCR Result for Entity: ${response.pi}`);
+	output.push("");
+	output.push(`**View on Arke**: https://arke.institute/${response.pi}`);
+	output.push("");
+
+	// Handle error status
+	if (response.status === "error") {
+		output.push("## Status: ERROR");
+		output.push("");
+		output.push(`- **Error Code**: ${response.error || "UNKNOWN"}`);
+		output.push(`- **Message**: ${response.message || "No error message provided"}`);
+		output.push(`- **Processing Time**: ${response.processing_time_ms}ms`);
+		return output.join("\n");
+	}
+
+	// Status and metadata
+	output.push("## Processing Info");
+	output.push("");
+	output.push(`- **Status**: ${response.status.toUpperCase()}`);
+	output.push(`- **Source**: ${response.source === "cached" ? "Cached (previously processed)" : "Newly processed"}`);
+	output.push(`- **Processing Time**: ${response.processing_time_ms}ms`);
+
+	// Multi-page document info
+	if (response.page_count) {
+		output.push(`- **Page Count**: ${response.page_count} ${response.page_count === 1 ? "page" : "pages"}`);
+	}
+
+	if (response.total_tokens) {
+		output.push(`- **Total Tokens**: ${response.total_tokens.toLocaleString()}`);
+	}
+
+	if (response.total_cost_usd !== undefined) {
+		output.push(`- **Total Cost**: $${response.total_cost_usd.toFixed(6)}`);
+	}
+
+	// Legacy single-page fields (backward compatibility)
+	if (response.source === "ocr_processed" && !response.pages) {
+		if (response.source_filename) {
+			output.push(`- **Source File**: ${response.source_filename}`);
+		}
+		if (response.source_type) {
+			output.push(`- **Source Type**: ${response.source_type.toUpperCase()}`);
+		}
+		if (response.cost_usd) {
+			output.push(`- **Cost**: $${response.cost_usd.toFixed(6)}`);
+		}
+	}
+
+	if (response.ocr_metadata) {
+		output.push(`- **OCR Model**: ${response.ocr_metadata.model}`);
+		output.push(`- **Processed At**: ${response.ocr_metadata.processed_at}`);
+	}
+
+	if (response.metadata_updated) {
+		output.push(`- **Metadata Updated**: Yes (stored to IPFS)`);
+	}
+
+	// Per-page details (if multi-page)
+	if (response.pages && response.pages.length > 0) {
+		output.push("");
+		output.push("## Page Details");
+		output.push("");
+
+		// Show first 5 pages, summarize the rest
+		const pagesToShow = response.pages.slice(0, 5);
+		const remainingPages = response.pages.length - pagesToShow.length;
+
+		for (const page of pagesToShow) {
+			output.push(`**Page ${page.page_number}**:`);
+			output.push(`- File: ${page.source_filename}`);
+			output.push(`- Tokens: ${page.tokens.toLocaleString()}`);
+			output.push(`- Cost: $${page.cost_usd.toFixed(6)}`);
+			output.push("");
+		}
+
+		if (remainingPages > 0) {
+			output.push(`*... and ${remainingPages} more ${remainingPages === 1 ? "page" : "pages"}*`);
+			output.push("");
+		}
+	}
+
+	output.push("---");
+	output.push("");
+
+	// Extracted text
+	output.push("## Extracted Text");
+	output.push("");
+
+	if (response.extracted_text && response.extracted_text.trim().length > 0) {
+		const text = response.extracted_text.trim();
+		const wordCount = text.split(/\s+/).length;
+		const charCount = text.length;
+
+		output.push(`**Stats**: ${wordCount.toLocaleString()} words, ${charCount.toLocaleString()} characters`);
+		output.push("");
+		output.push("```");
+		output.push(text);
+		output.push("```");
+	} else {
+		output.push("*No text extracted from document*");
+	}
+
+	return output.join("\n");
+}
+
+/**
+ * Format batch OCR response for AI consumption (multiple PIs)
+ */
+export function formatOCRBatchResultForAI(response: OCRBatchResponse): string {
+	const output: string[] = [];
+
+	output.push(`# Batch OCR Results (${response.total_pis} ${response.total_pis === 1 ? "entity" : "entities"})`);
+	output.push("");
+
+	// Summary
+	output.push("## Summary");
+	output.push("");
+	output.push(`- **Total Entities**: ${response.total_pis}`);
+	output.push(`- **Successful**: ${response.successful}`);
+	output.push(`- **Failed**: ${response.failed}`);
+	output.push(`- **Total Cost**: $${response.total_cost_usd.toFixed(6)}`);
+	output.push(`- **Total Processing Time**: ${response.total_processing_time_ms}ms`);
+	output.push("");
+
+	// Individual results
+	output.push("---");
+	output.push("");
+	output.push("## Individual Results");
+	output.push("");
+
+	for (let i = 0; i < response.results.length; i++) {
+		const result = response.results[i];
+
+		output.push(`### ${i + 1}. Entity: ${result.pi}`);
+		output.push("");
+		output.push(`**View on Arke**: https://arke.institute/${result.pi}`);
+		output.push("");
+
+		if (result.status === "error") {
+			output.push(`**Status**: ❌ ERROR`);
+			output.push(`- **Error**: ${result.error || "UNKNOWN"}`);
+			output.push(`- **Message**: ${result.message || "No error message"}`);
+		} else {
+			output.push(`**Status**: ✅ SUCCESS`);
+			output.push(`- **Source**: ${result.source === "cached" ? "Cached" : "Newly processed"}`);
+
+			if (result.page_count) {
+				output.push(`- **Pages**: ${result.page_count}`);
+			}
+
+			if (result.total_tokens) {
+				output.push(`- **Tokens**: ${result.total_tokens.toLocaleString()}`);
+			}
+
+			if (result.total_cost_usd !== undefined) {
+				output.push(`- **Cost**: $${result.total_cost_usd.toFixed(6)}`);
+			}
+
+			// Text preview
+			if (result.extracted_text && result.extracted_text.trim().length > 0) {
+				const text = result.extracted_text.trim();
+				const wordCount = text.split(/\s+/).length;
+				const preview = text.length > 200
+					? `${text.substring(0, 200)}...`
+					: text;
+
+				output.push("");
+				output.push(`**Text Preview** (${wordCount.toLocaleString()} words):`);
+				output.push("```");
+				output.push(preview);
+				output.push("```");
+			}
+		}
+
+		output.push(`- **Processing Time**: ${result.processing_time_ms}ms`);
+
+		if (i < response.results.length - 1) {
 			output.push("");
 			output.push("---");
 			output.push("");

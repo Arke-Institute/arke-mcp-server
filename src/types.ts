@@ -109,3 +109,66 @@ export interface EntityResponse extends EntityManifest {
 export interface GetEntitiesRequest {
 	pis: string[];
 }
+
+// OCR API request parameters
+export interface OCRRequest {
+	pi?: string; // Single PI
+	pis?: string[]; // Batch PIs
+	force_reprocess?: boolean;
+	update_metadata?: boolean;
+}
+
+// OCR page information (for multi-page documents)
+export interface OCRPageInfo {
+	page_number: number;
+	source_url: string;
+	source_filename: string;
+	extracted_text: string;
+	tokens: number;
+	cost_usd: number;
+}
+
+// OCR metadata (provenance info)
+export interface OCRMetadata {
+	model: string;
+	processed_at: string;
+	source: string;
+	page_count?: number;
+	total_tokens?: number;
+}
+
+// OCR API response (single PI)
+export interface OCRResponse {
+	pi: string;
+	status: "success" | "error";
+	source: "cached" | "ocr_processed";
+	cached: boolean;
+	extracted_text?: string; // Optional: not present when status === "error"
+	processing_time_ms: number;
+	// Multi-page fields (present when ocr_processed)
+	page_count?: number;
+	pages?: OCRPageInfo[];
+	total_cost_usd?: number;
+	total_tokens?: number;
+	// Single-page legacy fields (for backward compatibility)
+	source_url?: string;
+	source_type?: string;
+	source_filename?: string;
+	cost_usd?: number;
+	// Metadata update info
+	metadata_updated?: boolean;
+	ocr_metadata?: OCRMetadata;
+	// Error fields (when status === "error")
+	error?: string;
+	message?: string;
+}
+
+// OCR batch response (multiple PIs)
+export interface OCRBatchResponse {
+	results: OCRResponse[];
+	total_pis: number;
+	successful: number;
+	failed: number;
+	total_cost_usd: number;
+	total_processing_time_ms: number;
+}
