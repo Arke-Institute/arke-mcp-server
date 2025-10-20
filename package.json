@@ -1,0 +1,33 @@
+{
+	"name": "arke-mcp-server",
+	"version": "1.0.0",
+	"description": "MCP server for searching Arke Institute's semantic archive of NARA records and presidential libraries",
+	"keywords": ["mcp", "arke", "nara", "archives", "semantic-search", "presidential-libraries"],
+	"author": "Arke Institute",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/arke-institute/arke-mcp"
+	},
+	"private": false,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"format": "biome format --write",
+		"lint:fix": "biome lint --fix",
+		"start": "wrangler dev",
+		"cf-typegen": "wrangler types",
+		"type-check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "1.19.1",
+		"agents": "^0.2.8",
+		"zod": "^3.25.76"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.2.5",
+		"@types/node": "^24.8.1",
+		"typescript": "5.9.3",
+		"wrangler": "^4.43.0"
+	}
+}
